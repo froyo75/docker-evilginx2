@@ -37,6 +37,11 @@ bash-5.1# evilginx -p /app/phishlets/ -developer -debug
 docker logs evilginx2
 ```
 
+### Clean up unused images
+```shell
+docker image prune -f
+```
+
 ### Remove all containers + images (clean install)
 
 ```shell
