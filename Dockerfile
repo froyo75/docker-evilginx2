@@ -36,6 +36,14 @@ RUN set -ex \
 RUN set -ex \
     && sed -i 's/arpa/tech\|security\|arpa/g' ${PROJECT_DIR}/core/http_proxy.go
 
+# Add date to EvilGinx2 log
+RUN set -ex \
+    && sed -i 's/"%02d:%02d:%02d", t.Hour()/"%02d\/%02d\/%04d - %02d:%02d:%02d", t.Day(), int(t.Month()), t.Year(), t.Hour()/g' ${PROJECT_DIR}/log/log.go
+
+# Set "whitelistIP" timeout to 10 seconds
+RUN set -ex \
+    && sed -i 's/10 \* time.Minute/10 \* time.Second/g' ${PROJECT_DIR}/core/http_proxy.go
+
 # Build EvilGinx2
 WORKDIR ${PROJECT_DIR}
 RUN set -x \
